@@ -1,0 +1,186 @@
+A — What these ports/services are (short)
+
+135/tcp — msrpc (Microsoft RPC, RPC Endpoint Mapper)
+Windows RPC endpoint mapper. Used by many Windows management features (DCOM, remote procedure calls, service control, some remote management). It helps clients find which ports specific RPC services are listening on.
+
+139/tcp — netbios-ssn (NetBIOS Session Service)
+Legacy Windows file/printer sharing and name/session services for older SMB over NetBIOS. Often present on Windows systems for legacy compatibility.
+
+445/tcp — microsoft-ds (SMB / CIFS over TCP)
+Modern Windows file sharing, domain services, and many Windows services (SMBv1/v2/v3). Hosts file shares, named pipes, inter-process network APIs.
+
+4343/tcp — ssl/unicall?
+Nmap guessed this as unicall and flagged ssl/… which suggests Nmap saw a TLS handshake or a banner commonly associated with some custom/third-party service listening on TCP/4343. This is not a standard well-known Windows service — likely a vendor application or custom app using TLS on a nonstandard port.
+
+4449/tcp — ssl/privatewire?
+Similar to 4343: a non-standard/private service on a nonstandard port that appears to be using TLS (nmap reports ssl/...). Likely a third-party or custom application.
+
+B — Security risks (by service)
+135 — RPC (msrpc)
+
+Why risky: RPC has historically been a target for remote code execution and privilege-escalation exploits because RPC endpoints expose many methods and interfaces. If exposed to hostile networks, attackers can enumerate services and sometimes call vulnerable RPC interfaces.
+
+Attack surface: remote procedure calls, DCOM, service control interfaces, remote management endpoints.
+
+Immediate risk: information disclosure (service enumeration), remote exploitation if an unpatched RPC service exists.
+
+139 — NetBIOS Session (netbios-ssn)
+
+Why risky: NetBIOS leaks hostnames, share names and allows unauthenticated enumeration on poorly configured systems. It is legacy and less secure than SMB over 445.
+
+Attack surface: share enumeration, null sessions (if allowed), brute-force of SMB credentials over legacy channels.
+
+Immediate risk: information leakage, lateral-movement facilitation.
+
+445 — SMB / Microsoft-DS
+
+Why risky: SMB is a very attractive target (ransomware, wormable exploits, credential harvesting, NTLM relay, SMB signing bypasses). Exposing SMB beyond trusted internal networks is dangerous.
+
+Attack surface: file sharing, IPC, named pipes, authentication protocols (NTLMv1/v2), remote code execution bugs in SMB implementations.
+
+Immediate risk: data exfiltration, remote code execution if an unpatched vulnerability exists, lateral movement.
+
+4343 & 4449 — ssl/unicall? & ssl/privatewire?
+
+Why risky: Unknown/third-party services on nonstandard ports are risky because they may be custom, poorly maintained, or not monitored; TLS might be misconfigured (self-signed certs, weak ciphers), or the underlying application may have vulnerabilities.
+
+Attack surface: vendor app vulnerabilities, bad TLS config, undocumented endpoints, weak auth, default credentials.
+
+Immediate risk: service-specific remote exploits, credential leaks, information disclosure.
+
+C — Concrete investigation steps (safe commands you can run locally)
+
+1) Get more accurate service/version info with Nmap
+
+# version detection + script checks (be cautious; run only on devices you own)
+nmap -sS -sV --version-intensity 9 --script=banner,ssl-cert -p 135,139,445,4343,4449 192.168.56.1 -oN moreinfo.txt
+
+
+-sV attempts to get service/version banners.
+
+--script=banner,ssl-cert pulls basic banners and TLS certificate info for SSL services.
+
+Inspect moreinfo.txt.
+
+2) Check SMB/NetBIOS/RPC specifics from Windows host
+Open PowerShell as Administrator:
+
+# List SMB configuration (Windows 10/11 / Server)
+Get-SmbServerConfiguration | Format-List
+
+# Check if SMBv1 is enabled (dangerous, should be disabled)
+Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol
+
+# Check Windows Firewall rules allowing SMB/RPC
+Get-NetFirewallRule -Direction Inbound | Where-Object { $_.DisplayName -match 'SMB|File and Printer|Remote Service' } | Format-Table DisplayName,Enabled,Profile
+
+# List shares
+Get-SmbShare | Format-Table Name,Path,Description,ScopeName
+
+
+3) Enumerate SMB/NetBIOS from another machine (Linux or Windows with tools)
+
+From Linux (if you have smbclient):
+
+smbclient -L //192.168.56.1 -N    # -N = anonymous (null) auth attempt
+
+
+From Kali/Windows: enum4linux, rpcclient (if available) for richer enumeration.
+
+4) Inspect TLS for 4343/4449 (certificate & cipher)
+If openssl is available:
+
+# Get cert
+openssl s_client -connect 192.168.56.1:4343 -servername 192.168.56.1 < /dev/null
+openssl s_client -connect 192.168.56.1:4449 -servername 192.168.56.1 < /dev/null
+
+
+Check certificate CN/SAN, issuer, validity, and whether it is self-signed. Look for weak ciphers or TLSv1.0/1.1.
+
+5) Capture packets while probing (for deeper inspection)
+
+# On Windows with Wireshark/tshark installed: start capture, then run nmap
+# Or use tcpdump equivalent on your scanner machine:
+sudo tshark -i <interface> -w scan_probe.pcap host 192.168.56.1 and \(tcp port 135 or tcp port 139 or tcp port 445 or tcp port 4343 or tcp port 4449\)
+
+
+Open scan_probe.pcap in Wireshark and look at TLS handshakes, SMB negotiation, and any unencrypted payloads.
+
+D — Remediation & hardening recommendations (prioritized)
+
+Remove external exposure
+
+Do not expose SMB/NetBIOS/RPC to untrusted networks (internet). If these ports are reachable from outside your LAN, block them at edge firewalls immediately.
+
+Disable SMBv1
+
+SMBv1 is obsolete and insecure. Disable it unless you absolutely need it for legacy devices.
+
+Limit access with firewall rules
+
+Allow management ports only from specific management IPs or via VPN. Example (PowerShell, allow SMB only from management subnet):
+
+New-NetFirewallRule -DisplayName "SMB-Restrict" -Direction Inbound -LocalPort 445 -Protocol TCP -Action Allow -RemoteAddress 192.168.56.0/24
+
+
+Or replace with exact management host IPs.
+
+Assess & patch
+
+Run Windows Update and patch the system. For third-party apps on 4343/4449, check vendor updates and apply patches.
+
+Investigate unknown services (4343/4449)
+
+Determine the process owning the port on the host:
+
+# run as admin
+netstat -ano | findstr ":4343"
+netstat -ano | findstr ":4449"
+# note the PID, then:
+tasklist /fi "PID eq <pid>"
+Get-Process -Id <pid> | Format-List *
+
+
+If it’s an unexpected binary, investigate vendor, version, and necessity. If not required, uninstall or stop the service.
+
+Harden TLS
+
+For services using TLS on non-standard ports, ensure certificates are valid (not expired/self-signed unless internal and trusted), use strong ciphers and TLS 1.2/1.3 only, and avoid obsolete ciphers.
+
+Authentication & monitoring
+
+Enforce strong authentication, disable anonymous/guest access to shares, enable SMB signing where appropriate, and log/monitor access to these services (Windows Event logs, SIEM).
+
+Network segmentation
+
+Place servers with management services on a management VLAN and require VPN/ACLs to access them.
+
+Periodic scanning & inventory
+
+Re-scan periodically and after configuration changes. Keep a record of which hosts should have which open ports.
+
+E — Quick risk matrix (one-liner each)
+
+445 (SMB) — High risk if reachable from untrusted networks. Patch & restrict.
+
+135 (RPC) — Medium–High: often required but can be abused; patch & restrict.
+
+139 (NetBIOS) — Medium: legacy; remove or block where possible.
+
+4343 / 4449 (Unknown TLS services) — Variable/Medium: treat as high until you have verified vendor, patch status, TLS config, and authentication.
+
+F — Example immediate checklist (what to run now)
+
+nmap -sV --script=ssl-cert,banner -p 135,139,445,4343,4449 192.168.56.1 -oN investigate.txt
+
+On the Windows host (Admin):
+
+netstat -ano | findstr ":4343" and tasklist /fi "PID eq <pid>"
+
+Get-SmbServerConfiguration
+
+Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol
+
+If unknown processes found on 4343/4449, stop service and locate vendor docs; if malicious/unexpected, isolate host and investigate.
+
+Block 139/445/135 at perimeter for non-management networks.
