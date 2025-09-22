@@ -1,4 +1,4 @@
-# Port & Service Risk Assessment (Host: 192.168.56.1)
+# Port & Service Risk Assessment (Example Host: 192.168.50.1)
 
 ## A — Services Overview
 - **135/tcp — msrpc**  
@@ -25,7 +25,7 @@
 ## C — Investigation Steps
 1. **Nmap scan for detail:**  
    ```bash
-   nmap -sS -sV --version-intensity 9 --script=banner,ssl-cert    -p 135,139,445,4343,4449 192.168.56.1 -oN moreinfo.txt
+   nmap -sS -sV --version-intensity 9 --script=banner,ssl-cert    -p 135,139,445,4343,4449 192.168.50.1 -oN moreinfo.txt
    ```
 2. **Check Windows host (Admin PowerShell):**
    ```powershell
@@ -42,8 +42,8 @@
    ```
 4. **Inspect TLS certs:**  
    ```bash
-   openssl s_client -connect 192.168.56.1:4343 -servername 192.168.56.1 < /dev/null
-   openssl s_client -connect 192.168.56.1:4449 -servername 192.168.56.1 < /dev/null
+   openssl s_client -connect 192.168.50.1:4343 -servername 192.168.50.1 < /dev/null
+   openssl s_client -connect 192.168.50.1:4449 -servername 192.168.50.1 < /dev/null
    ```
 
 ---
@@ -74,7 +74,7 @@
 ## F — Immediate Checklist
 - Run targeted Nmap:  
   ```bash
-  nmap -sV --script=ssl-cert,banner -p 135,139,445,4343,4449 192.168.56.1 -oN investigate.txt
+  nmap -sV --script=ssl-cert,banner -p 135,139,445,4343,4449 192.168.50.1 -oN investigate.txt
   ```
 - On host: check `netstat` → match PID → identify process.  
 - Confirm SMB1 disabled, review shares, patch system.  
