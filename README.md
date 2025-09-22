@@ -17,11 +17,12 @@ This document presents a concise, professional guide for performing a lawful loc
 From `ipconfig` on the scanning host:
 
 ```
-IPv4 Address : 192.168.56.1
+For example
+IPv4 Address : 192.168.50.1
 Subnet Mask  : 255.255.255.0
 ```
 
-Network range: `192.168.56.0/24`.
+Network range: `192.168.50.0/24`.
 
 ---
 
@@ -29,18 +30,18 @@ Network range: `192.168.56.0/24`.
 1. Subnet scan (SYN scan) to discover active hosts and open ports:
 
 ```
-nmap -sS 192.168.56.0/24
+nmap -sS 192.168.50.0/24
 ```
 
 2. Targeted service and version scan for a specific host:
 
 ```
-nmap -sS -sV -p 135,139,445,4343,4449 192.168.56.1
+nmap -sS -sV -p 135,139,445,4343,4449 192.168.50.1
 ```
 
 Generated artifacts:
 - [`scan.html`](scan/scan.html) — subnet scan results.
-- [`service_scan.html`](scan/service_scan.html) — service/version scan results for 192.168.56.1.
+- [`service_scan.html`](scan/service_scan.html) — service/version scan results for 192.168.50.1.
 - [`Service assessment`](scan/port_service_assessment.md) — analyst notes and mitigation suggestions.
 
 ---
