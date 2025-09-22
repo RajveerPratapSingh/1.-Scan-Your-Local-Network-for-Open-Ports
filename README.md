@@ -39,9 +39,9 @@ nmap -sS -sV -p 135,139,445,4343,4449 192.168.56.1
 ```
 
 Generated artifacts:
-- [`scan.html`](scan.html) — subnet scan results.
-- [`service_scan.html`](service_scan.html) — service/version scan results for 192.168.56.1.
-- [`Service assessment`](port_service_assessment.md) — analyst notes and mitigation suggestions.
+- [`scan.html`](scan/scan.html) — subnet scan results.
+- [`service_scan.html`](scan/service_scan.html) — service/version scan results for 192.168.56.1.
+- [`Service assessment`](scan/port_service_assessment.md) — analyst notes and mitigation suggestions.
 
 ---
 
